@@ -1,0 +1,7 @@
+#!/bin/bash
+wget https://mattmahoney.net/dc/enwik9.zip
+unzip enwik9.zip
+rm -rf enwik9.zip
+wget https://mattmahoney.net/dc/enwik8.zip
+unzip enwik8.zip
+rm -rf enwik8.zip
