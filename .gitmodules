@@ -1,0 +1,12 @@
+[submodule "erofs-utils"]
+	path = 0.src/erofs-utils
+	url = git@github.com:amFeynman/erofs-utils.git
+	branch = experimental
+[submodule "xz"]
+	path = 0.src/xz
+	url = git@github.com:amFeynman/xz.git
+	branch = v5.4
+[submodule "lz4"]
+	path = 0.src/lz4
+	url = git@github.com:amFeynman/lz4.git
+	branch = dev
