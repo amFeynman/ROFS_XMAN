@@ -1,0 +1,26 @@
+From a9761ae2160693a8348045637a63785111ec8e9f Mon Sep 17 00:00:00 2001
+From: Feynman <gxnorz@gmail.com>
+Date: Tue, 20 Aug 2024 20:23:01 +0800
+Subject: [PATCH 2/2] erofs-utils: Add liblzma_CFLAGS to mkfs.erofs CFLAGS
+
+Signed-off-by: Feynman <gxnorz@gmail.com>
+---
+ mkfs/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mkfs/Makefile.am b/mkfs/Makefile.am
+index 6354712..40599d6 100644
+--- a/mkfs/Makefile.am
++++ b/mkfs/Makefile.am
+@@ -4,7 +4,7 @@ AUTOMAKE_OPTIONS = foreign
+ bin_PROGRAMS     = mkfs.erofs
+ AM_CPPFLAGS = ${libselinux_CFLAGS}
+ mkfs_erofs_SOURCES = main.c
+-mkfs_erofs_CFLAGS = -Wall -I$(top_srcdir)/include
++mkfs_erofs_CFLAGS = -Wall -I$(top_srcdir)/include ${liblzma_CFLAGS}
+ mkfs_erofs_LDADD = $(top_builddir)/lib/liberofs.la ${libselinux_LIBS} \
+ 	${libuuid_LIBS} ${liblz4_LIBS} ${liblzma_LIBS} ${zlib_LIBS} \
+ 	${libdeflate_LIBS} ${libzstd_LIBS} ${libqpl_LIBS}
+-- 
+2.38.1
+

@@ -1,0 +1,100 @@
+From 9a4eb121d9b9c94a56c03d50613ae4ffb87a1305 Mon Sep 17 00:00:00 2001
+From: Feynman <gxnorz@gmail.com>
+Date: Tue, 20 Aug 2024 18:59:47 +0800
+Subject: [PATCH 1/2] Revert "erofs-utils: support liblzma auto-detection"
+
+This reverts commit 37ada1b449ae823ca6d596059e5fbe78c4b6cc63.
+
+Signed-off-by: Feynman <gxnorz@gmail.com>
+
+Conflicts:
+	lib/compressor_liblzma.c
+---
+ configure.ac | 53 +++++++++++++++++++++++++++++-----------------------
+ 1 file changed, 30 insertions(+), 23 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 945e254..905bee9 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -127,8 +127,8 @@ AC_ARG_ENABLE(lz4,
+    [enable_lz4="$enableval"], [enable_lz4="yes"])
+ 
+ AC_ARG_ENABLE(lzma,
+-   [AS_HELP_STRING([--disable-lzma], [disable LZMA compression support @<:@default=auto@:>@])],
+-   [enable_lzma="$enableval"])
++   [AS_HELP_STRING([--enable-lzma], [enable LZMA compression support @<:@default=no@:>@])],
++   [enable_lzma="$enableval"], [enable_lzma="no"])
+ 
+ AC_ARG_WITH(zlib,
+    [AS_HELP_STRING([--without-zlib],
+@@ -184,6 +184,14 @@ AC_ARG_WITH(lz4-libdir,
+ AC_ARG_VAR([LZ4_CFLAGS], [C compiler flags for lz4])
+ AC_ARG_VAR([LZ4_LIBS], [linker flags for lz4])
+ 
++AC_ARG_WITH(liblzma-incdir,
++   [AS_HELP_STRING([--with-liblzma-incdir=DIR], [liblzma include directory])], [
++   EROFS_UTILS_PARSE_DIRECTORY(["$withval"],[withval])])
++
++AC_ARG_WITH(liblzma-libdir,
++   [AS_HELP_STRING([--with-liblzma-libdir=DIR], [liblzma lib directory])], [
++   EROFS_UTILS_PARSE_DIRECTORY(["$withval"],[withval])])
++
+ # Checks for header files.
+ AC_CHECK_HEADERS(m4_flatten([
+ 	dirent.h
+@@ -426,31 +434,30 @@ if test "x$enable_lz4" = "xyes"; then
+   CPPFLAGS=${saved_CPPFLAGS}
+ fi
+ 
+-# Configure liblzma
+-have_liblzma="no"
+-AS_IF([test "x$enable_lzma" != "xno"], [
++if test "x$enable_lzma" = "xyes"; then
+   saved_CPPFLAGS=${CPPFLAGS}
+-  PKG_CHECK_MODULES([liblzma], [liblzma], [
+-    # Paranoia: don't trust the result reported by pkgconfig before trying out
++  test -z "${with_liblzma_incdir}" ||
++    CPPFLAGS="-I$with_liblzma_incdir $CPPFLAGS"
++  AC_CHECK_HEADERS([lzma.h],[have_lzmah="yes"], [])
++
++  if test "x${have_lzmah}" = "xyes" ; then
+     saved_LIBS="$LIBS"
+-    saved_CPPFLAGS=${CPPFLAGS}
+-    CPPFLAGS="${liblzma_CFLAGS} ${CPPFLAGS}"
+-    LIBS="${liblzma_LIBS} $LIBS"
+-    AC_CHECK_HEADERS([lzma.h],[
+-      AC_CHECK_LIB(lzma, lzma_microlzma_encoder, [
+-        AC_CHECK_DECL(lzma_microlzma_encoder, [have_liblzma="yes"],
+-          [], [[
++    saved_LDFLAGS="$LDFLAGS"
++
++    test -z "${with_liblzma_libdir}" ||
++      LDFLAGS="-L$with_liblzma_libdir ${LDFLAGS}"
++    AC_CHECK_LIB(lzma, lzma_microlzma_encoder, [],
++      [AC_MSG_ERROR([Cannot find proper liblzma])])
++
++    AC_CHECK_DECL(lzma_microlzma_encoder, [have_liblzma="yes"],
++      [AC_MSG_ERROR([Cannot find proper liblzma])], [[
+ #include <lzma.h>
+-        ]])
+-      ])
+-    ])
++    ]])
++    LDFLAGS="${saved_LDFLAGS}"
+     LIBS="${saved_LIBS}"
+-    CPPFLAGS="${saved_CPPFLAGS}"
+-  ], [[]])
+-  AS_IF([test "x$enable_lzma" = "xyes" -a "x$have_liblzma" != "xyes"], [
+-    AC_MSG_ERROR([Cannot find a proper liblzma version])
+-  ])
+-])
++  fi
++  CPPFLAGS="${saved_CPPFLAGS}"
++fi
+ 
+ # Configure zlib
+ have_zlib="no"
+-- 
+2.38.1
+
