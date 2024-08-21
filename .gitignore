@@ -53,3 +53,5 @@ dkms.conf
 1.bin/
 enwik8*
 enwik9*
+fedora.img
+vm_dir/*
