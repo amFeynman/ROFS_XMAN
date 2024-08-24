@@ -1,4 +1,13 @@
 #!/bin/bash
+
+create_qcow2()
+{
+	local image_name=$1
+	local image_size=$2
+	[[ -e $image_name ]] && echo "${image_name} already exists!" && return 0
+	qemu-img create -f qcow2 $image_name $image_size
+}
+
 get_bridge_ip()
 {
 	local ip=$((ifconfig  | grep -E "inet 192.[[:graph:]]+" -o | grep -E "192.168.[[:digit:]]+" -o \
@@ -31,25 +40,43 @@ set_bridge()
 		echo sudo iptables -t nat -A POSTROUTING -s $vm_network/$vm_mask \! -d $vm_network/$vm_mask -j MASQUERADE
 		echo sudo sysctl -w net.ipv4.ip_forward=1
 		echo cat /etc/qemu/bridge.conf \| grep \"allow ${br}$\" \|\| "echo \"allow ${br}\" | sudo tee -a /etc/qemu/bridge.conf"
+		return 1
 	fi
+}
+
+get_imgs_for_vm()
+{
+	local imgs_dir=$1
+	local disk_strings=""
+
+	for img in `ls $imgs_dir/*`
+	do
+		disk_strings=${disk_strings}"-drive file=${img},format=qcow2,if=virtio,cache=writethrough "
+	done
+	echo $disk_strings
 }
 
 run_qemu()
 {
 	local bzImage=${1:-./bzImage}
 	local ip_tail=${2:-11}
+	local rootfs_img=${3:-./fedora.img}
 	local ip_ns=$(get_bridge_ip)
 	local ip_vm="192.168.${ip_ns}.${ip_tail}"
 	local vm_dir=$(dirname $(realpath $0))/vm_dir
 	local logfile=${vm_dir}/vm_${ip_tail}.log
-	local imgs_dir=${vm_dir}/imgs
+	local imgs_dir=${vm_dir}/imgs/${ip_vm}/
 	local br_qemu=br_$(whoami)
-
+	local DISKS_FOR_VM=""
+	echo $@
 	mkdir -p $imgs_dir
 
 	# set up qemu bridge
-	set_bridge ${br_qemu} $(get_bridge_ip)
-	exit ${LINENO}
+	set_bridge ${br_qemu} $(get_bridge_ip) || exit ${LINENO}
+	create_qcow2 $imgs_dir/vdb.img 5G
+	create_qcow2 $imgs_dir/vdc.img 5G
+	DISKS_FOR_VM=$(get_imgs_for_vm $imgs_dir)
+	#echo $DISKS_FOR_VM
 
 	qemu-system-x86_64 \
 	-smp 8 -m 16G -cpu host \
@@ -57,16 +84,15 @@ run_qemu()
 	-kernel ${bzImage} \
 	-net nic,model=virtio,macaddr=DE:AD:BE:EF:63:36 \
 	-net bridge,br=${br_qemu} \
-	-drive file=fedora_36_x86.img,format=qcow2,if=virtio,cache=writethrough \
-	-watchdog ib700 -watchdog-action debug \
+	-drive file=${rootfs_img},format=qcow2,if=virtio,cache=writethrough \
 	-monitor unix:${vm_dir}/socket_${ip_tail},server,nowait \
 	-chardev stdio,id=char0,mux=on,logfile=${logfile},signal=off \
 	-serial chardev:char0 -mon chardev=char0 -device virtio-scsi-pci \
-	-virtfs local,path=linux,mount_tag=src,security_model=mapped-file \
-	-drive file=$imgs_dir/fedora_36_x86.img-vdb.img,format=qcow2,if=virtio,cache=writethrough \
-	-drive file=$imgs_dir/fedora_36_x86.img-vdc.img,format=qcow2,if=virtio,cache=writethrough \
-	-append "console=ttyS0 root=/dev/vda2 IP=${ip_vm} rdinit=/init selinux=0 raid=noautodetect acpi=noirq crashkernel=512M" \
+	$DISKS_FOR_VM \
+	-virtfs local,path=./,mount_tag=src,security_model=mapped-file \
+	-append "console=ttyS0 root=/dev/vda3 IP=${ip_vm} init=/sbin/init selinux=0 raid=noautodetect acpi=noirq crashkernel=512M selinux=0" \
 	-nographic
 }
 
-run_qemu
+#run_qemu ~/linux_master/arch/x86/boot/bzImage 11 fedora.img
+run_qemu $@
