@@ -95,4 +95,4 @@ run_qemu()
 }
 
 #run_qemu ~/linux_master/arch/x86/boot/bzImage 11 fedora.img
-run_qemu $@
+run_qemu ~/linux_master/arch/x86/boot/bzImage 11
