@@ -42,6 +42,7 @@ build_erofs_utils()
 	local wkdir=$1
 	local install_prefix=$2
 	cd $wkdir
+	make clean
 	[[ -a Makefile ]] || (./autogen.sh && \
 					./configure --prefix=${install_prefix} \
 					--with-lz4-incdir=${install_prefix}/include \
@@ -53,7 +54,7 @@ build_erofs_utils()
 	make install -j32
 }
 
-prepare_install_tools
+#prepare_install_tools
 
 case "$1" in
 	xz)
