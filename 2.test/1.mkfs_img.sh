@@ -5,6 +5,7 @@ MKFS=`which mkfs.erofs`
 DPFS=`which dump.erofs`
 SRC_DIR=${1:-./0.src}
 IMGDIR=./0.image/
+ORIGIN_IMG_ACHIVE_DIR=$IMGDIR/$(basename $SRC_DIR)
 LOG_FILE=${IMGDIR}/mkfs.log
 
 mkdir -p ${IMGDIR}
@@ -18,11 +19,37 @@ create_erofsimg()
 	mkdir -p $img_dir
 	img_name=$img_dir/$(basename $SRC_DIR)$(echo $@ | tr -s ' '| sed  's/\([^a-zA-Z0-9]\)/\_/g' | tr -s '_').img
 	[[ ! -e $img_name ]] && echo "MKFS [mkfs.erofs $img_name $@ ${SRC_DIR}]" | tee -a ${LOG_FILE}
-	[[ ! -e $img_name ]] && $MKFS ${img_name} $@ ${SRC_DIR} >> ${LOG_FILE} 2>&1 && return 0
-	echo "$img_name exists!" | tee -a ${LOG_FILE}
+	[[ ! -e $img_name ]] && $MKFS ${img_name} $@ ${SRC_DIR} >> ${LOG_FILE} 2>&1
+	[[ ! -e $img_name ]] && echo "$img_name exists!" | tee -a ${LOG_FILE}
 }
 
-compare_filesize()
+dump_one_file()
+{
+	local img=$1
+	local fname=$2
+
+	#$DPFS $img --path=$fname | grep -E "^Size.*$| Compression ratio:.*$" -o | xargs
+	$DPFS $img --path=$fname | grep -E "On-disk size: [[:digit:]]+" -o | grep -E "[[:digit:]]+" -o
+}
+
+compare_perfile()
+{
+	local org_img=$1
+	local cmp_img=$2
+	local format_str=$3
+	local src_dir=$SRC_DIR
+	#echo $@ $src_dir
+	for f in `ls $SRC_DIR/*`
+	do
+		local cur_fname=$(basename $f)
+		local cur_orgimg_disksize=$(dump_one_file $org_img $cur_fname)
+		local cur_cmpimg_disksize=$(dump_one_file $cmp_img $cur_fname)
+		local opt_ratio=$(echo $cur_orgimg_disksize $cur_cmpimg_disksize | awk '{print (1-$2/$1)*100}' | xargs printf "%.2f%%")
+		printf "$format_str\n" "  =>$cur_fname" $cur_orgimg_disksize $cur_cmpimg_disksize "${opt_ratio}"
+	done
+}
+
+compare_imgsize()
 {
 	local org_dir=$1
 	local cmp_dir=$2
@@ -30,11 +57,10 @@ compare_filesize()
 	local org_fname
 	local cmp_fname
 	local cur_name
-	local format_str="|%-30s|%-12s|%-12s|%-9s|"
-	local header_str="|%-30s|%-12s|%-12s|%-9s|"
+	local format_str="|%-35s|%-12s|%-12s|%-9s|"
 
-	printf "$header_str\n" "erofs_image" "orgin_size" "${name_diff}" "Opt_ratio"
-	printf "$header_str\n" "--" "--" "--" "--"
+	printf "$format_str\n" "erofs_image" "orgin_size" "${name_diff}" "Opt_ratio"
+	printf "$format_str\n" "--" "--" "--" "--"
 	for f in $(ls $org_dir/* -S)
 	do
 		org_fname=$f
@@ -46,6 +72,7 @@ compare_filesize()
 		local cmp_size=$(stat --printf="%s" $cmp_fname)
 		local opt_ratio=$(echo $org_size $cmp_size | awk '{print (1-$2/$1)*100}' | xargs printf "%.2f%%")
 		printf "$format_str\n" $cur_name $org_size $cmp_size "${opt_ratio}"
+		compare_perfile $org_fname $cmp_fname $format_str
 	done
 }
 
@@ -58,26 +85,20 @@ mkimg_raw()
 	create_erofsimg  ${IMGDIR}/ -E force-inode-extended || exit ${LINENO}
 }
 
-mkimg_lzma()
-{
-	#erofs-lzma-4k
-	create_erofsimg  ${IMGDIR}/ -zlzma,9 -C 4096 || exit ${LINENO}
-	create_erofsimg  ${IMGDIR}/ -zlzma,9 -C 8192 || exit ${LINENO}
-	#create_erofsimg  ${IMGDIR}/ -zlzma,9 -C 1048576 --random-pclusterblks || exit ${LINENO}
-}
-
 erofs_mkimg()
 {
 	local cluster
-	local cluster_list="4 8 32 64 1024"
+	local cluster_list="4 8"
+	local orgdir=$ORIGIN_IMG_ACHIVE_DIR
 
 	for cluster in $cluster_list
 	do
-		create_erofsimg  ${IMGDIR}/origin -zlz4hc,9 -C $((cluster * 1024))  || exit ${LINENO}
-		create_erofsimg  ${IMGDIR}/       -zlz4hc,9 -C $((cluster * 1024)) --bcj-arm64 || exit ${LINENO}
-		create_erofsimg  ${IMGDIR}/origin -zlzma    -C $((cluster * 1024))  || exit ${LINENO}
-		create_erofsimg  ${IMGDIR}/       -zlzma    -C $((cluster * 1024)) --bcj-arm64 || exit ${LINENO}
+		create_erofsimg  ${orgdir}/       -zlz4hc,9 -C $((cluster * 1024)) &
+		create_erofsimg  ${orgdir}/       -zlzma    -C $((cluster * 1024)) &
+		create_erofsimg  ${IMGDIR}/       -zlz4hc,9 -C $((cluster * 1024)) --bcj-arm64 &
+		create_erofsimg  ${IMGDIR}/       -zlzma    -C $((cluster * 1024)) --bcj-arm64 &
 	done
+	wait
 }
 
 mkimg_random()
@@ -103,4 +124,4 @@ test_dump_fsck_erofs()
 }
 
 erofs_mkimg
-compare_filesize ${IMGDIR}/origin ${IMGDIR}/ bcj_arm64
+compare_imgsize ${ORIGIN_IMG_ACHIVE_DIR} ${IMGDIR}/ bcj_arm64
