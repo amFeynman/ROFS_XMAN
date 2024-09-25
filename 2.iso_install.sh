@@ -31,10 +31,11 @@ install_iso_with_cmdline()
 	[[ ! -e  $kernel ]] && echo "kernel ${kernel} not exist!!" && return ${LINENO}
 	[[ ! -e  $initrd ]] && echo "initrd ${initrd} not exist!!" && return ${LINENO}
 	# attention: partion suggest to use standard partition, default xfs filesystem
-	qemu-system-x86_64 -enable-kvm -cpu host -boot dc -hda $iso_file -cdrom ${iso_file} \
+	qemu-system-x86_64 -enable-kvm -cpu host -boot dc -hda $dst_image -cdrom ${iso_file} \
 		-net nic -net user,hostfwd=tcp::12346-:22 -smp 4 -m 4G \
 		-kernel $kernel -initrd $initrd \
 		-append console=ttyS0 -nographic 
+	sudo umount ${tmp_mnt}
 }
 
 install_iso_with_cmdline $@
